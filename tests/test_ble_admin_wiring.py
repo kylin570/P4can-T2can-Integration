@@ -18,4 +18,8 @@ class BleAdminWiringTests(unittest.TestCase):
   self.assertIn('server.on("/bluetooth", HTTP_GET, httpBluetoothAdminPage)',web)
   self.assertIn('server.on("/api/ble-admin/status", HTTP_GET, httpBleAdminStatus)',web)
   self.assertIn('bleAdminReloadCredential();',web)
+  ui=(ROOT/'bluetooth_admin_ui.h').read_text()
+  self.assertIn('if(b.ok)s3xy=await b.json()',ui)
+  self.assertIn('s3xyControlButtons',ui)
+  self.assertIn('S3XY central unavailable in recovery/setup mode',ui)
 if __name__=='__main__': unittest.main()
