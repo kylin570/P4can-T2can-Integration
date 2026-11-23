@@ -2799,6 +2799,65 @@ static bool otaRequestAuthenticated() {
     return server.authenticate("admin", password.c_str());
 }
 
+// DashKit MIT body-control adaptation: all endpoints use the AP private
+// password and body actions start disabled. UI is never an arbitrary CAN TX.
+static void httpDashkitBodyPage() {
+  if (!otaCredentialReady()) { server.send(403, "text/plain", "Set private WiFi password first"); return; }
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", P4CAN_DASHKIT_BODY_HTML);
+}
+static void httpDashkitBodyStatus() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  const uint32_t now=(uint32_t)millis();
+  const DashkitBodyObserved s=dashkitBodyReadObserved();
+  String out;
+  JsonWriterArduino jw(out);
+  jw.boolean("enabled", dashkitBodyEnabled);
+  jw.boolean("legacyY",activeVehicleProfile == VEHICLE_MODEL_Y_LEGACY);
+  jw.boolean("parkedGateReady",dashkitBodyPermitNow(s,now));
+  jw.u32("gear",s.gear);
+  jw.boolean("zeroSpeed",s.stopped);
+  jw.u32("gearAgeMs",s.gearMs ? (uint32_t)(now-s.gearMs) : 999999u);
+  jw.u32("speedAgeMs",s.speedMs ? (uint32_t)(now-s.speedMs) : 999999u);
+  jw.u32("bodyFrameAgeMs",s.bodyMs ? (uint32_t)(now-s.bodyMs) : 999999u);
+  jw.string("pendingAction",dashkit_body::actionName(dashkitBodyPending));
+  jw.u32("pendingFrames",dashkitBodyFramesLeft);
+  jw.u32("txAcceptedByDriver",dashkitBodyTxAccepted);
+  jw.u32("txFailed",dashkitBodyTxFailed);
+  jw.string("lastResult",dashkitBodyLastResult);
+  jw.string("vehicleExecuted", "unverified");
+  jw.finish();
+  server.sendHeader("Cache-Control","no-store");
+  server.send(200,"application/json",out);
+}
+static void httpDashkitBodyEnable() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  if (!server.hasArg("enabled") || (server.arg("enabled")!="1" && server.arg("enabled")!="0")) {
+    server.send(400,"application/json","{\"ok\":false,\"error\":\"enabled must be 1 or 0\"}");
+    return;
+  }
+  const bool enabled=server.arg("enabled")=="1";
+  if (!dashkitBodySetEnabled(enabled)) {
+    server.send(409,"application/json","{\"ok\":false,\"error\":\"unsupported profile or settings write failure\"}");
+    return;
+  }
+  server.send(200,"application/json","{\"ok\":true,\"saved\":true}");
+}
+static void httpDashkitBodyAction() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  const uint8_t action=dashkit_body::actionParse(server.arg("action").c_str());
+  if (action==dashkit_body::NONE) {
+    server.send(400,"application/json","{\"ok\":false,\"error\":\"unsupported action\"}");
+    return;
+  }
+  if (!dashkitBodySchedule(action)) {
+    server.send(409,"application/json","{\"ok\":false,\"error\":\"disabled, busy, cooldown, or parked/CAN data not fresh\"}");
+    return;
+  }
+  server.send(202,"application/json","{\"ok\":true,\"queued\":true,\"vehicleExecuted\":false}");
+}
+
 static void httpOtaPage() {
     if (!otaCredentialReady()) {
         server.send(403, "text/plain; charset=utf-8", "Change the default Wi-Fi AP password in Settings before using OTA.");
@@ -6782,6 +6841,8 @@ static void webTask(void *arg) {
 #if P4CAN_SERIAL_DIAGNOSTICS
   IPAddress ip = WiFi.softAPIP();
 #endif
+  // Optional DashKit module never runs without explicit persisted opt-in.
+  dashkitBodyLoad();
   // Wi-Fi and BLE remain usable for maintenance in software rescue mode.
   // Do not launch the S3XY client mapper or any vehicle CAN task here.
   if (p4RecoveryBootMode) (void)bleAdminStartRescueOnly();
@@ -6795,6 +6856,10 @@ static void webTask(void *arg) {
   server.on("/fonts/geist-lab.woff2", HTTP_GET, httpLabGeistFont);
   server.on("/fonts/geist-mono-lab.woff2", HTTP_GET, httpLabGeistMonoFont);
   server.on("/api/profile/status", HTTP_GET, httpProfileStatus);
+  server.on("/body-controls", HTTP_GET, httpDashkitBodyPage);
+  server.on("/api/dashkit-body/status", HTTP_GET, httpDashkitBodyStatus);
+  server.on("/api/dashkit-body/enable", HTTP_POST, httpDashkitBodyEnable);
+  server.on("/api/dashkit-body/action", HTTP_POST, httpDashkitBodyAction);
   server.on("/gauge", HTTP_GET, httpTsl8GaugePage);
   server.on("/config-backup", HTTP_GET, httpTsl8BackupPage);
   server.on("/t2can", HTTP_GET, httpT2CanMonitorPage);
@@ -6940,6 +7005,7 @@ static void webTask(void *arg) {
 
   for (;;) {
     server.handleClient();
+    dashkitBodyTick();
     bleAdminServiceTick();
     recoveryButtonService();
     p4R79TimingDriverPoll();

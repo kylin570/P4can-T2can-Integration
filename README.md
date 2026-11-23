@@ -6,6 +6,7 @@
 > [integration notes](docs/T2CAN-INTEGRATION.md). Not tested on a vehicle.
 > Read-only monitoring web page: `/t2can` (JSON: `/api/t2can-monitor`).
 > Admin additions: `/bluetooth` (BLE status / pairing), `/update` (password-protected firmware OTA), `/recovery` (software rescue & A/B fallback). [Feature parity audit](docs/FEATURE-PARITY.md).
+> DashKit MIT vehicle body-control adaptation: `/body-controls` (Model Y Legacy only, opt-in, fresh parked CAN-gated; frunk/trunk/mirrors). [Port scope and enablement](docs/DASHKIT-PORT.md).
 > Mini-program feature audit: [TSL8 微信小程序功能差异核对](docs/TSL8-WECHAT-P4CAN-PARITY.md). Independent P4CAN read-only gauge `/gauge`, sanitized settings snapshot `/config-backup`. No proprietary TSL8 binary or mini-program source is bundled.
 
 

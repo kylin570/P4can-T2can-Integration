@@ -30,6 +30,9 @@ def main():
         source = ensure(source, anchor,
             anchor + '\n<div class="listrow"><div><div class="listkey"><a href="/gauge" style="color:inherit;text-decoration:underline">Vehicle Gauge / 车辆仪表</a></div><div class="listdesc">Live speed, AP/NOA and CAN status · read only</div></div><span class="chev">›</span></div>'
         + '\n<div class="listrow"><div><div class="listkey"><a href="/config-backup" style="color:inherit;text-decoration:underline">Config Snapshot / 参数快照</a></div><div class="listdesc">Export selected settings and compare a saved backup · no automatic restore</div></div><span class="chev">›</span></div>')
+    anchor = '<div class="listrow clickable" data-panel="panelDiag"><div><div class="listkey">Diagnostics / Recovery</div><div class="listdesc">Counters, boot capture and system logs</div></div><span class="chev">›</span></div>'
+    if 'DashKit Body Controls / 车身控制' not in source:
+        source = ensure(source, anchor, anchor+'\n<div class="listrow"><div><div class="listkey"><a href="/body-controls" style="color:inherit;text-decoration:underline">DashKit Body Controls / 车身控制</a></div><div class="listdesc">Optional Model Y Legacy manual frunk, trunk and mirror controls</div></div><span class="chev">›</span></div>')
     anchor = '<div class="softNote" id="wifiPasswordHint">'
     source = ensure(source, anchor, '<div class="softNote"><a href="/bluetooth">Open Bluetooth Administration</a> · <a href="/recovery">Recovery Centre</a> · <a href="/update">Firmware OTA</a></div>\n'+anchor)
     anchor = "const actionOptions=[['none','None'],['noa_cancel','NOA Lane Change Cancel'],"

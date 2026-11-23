@@ -29,5 +29,10 @@ jobs:
         run: |
           python3 tests/test_tsl8_compat_wiring.py -v
           node tests/test_tsl8_ui_runtime.js
+      - name: DashKit body control pure host tests and routing guards
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_dashkit_body_pure.cpp -o /tmp/dashkit_body_test
+          /tmp/dashkit_body_test
+          python3 tests/test_dashkit_body_wiring.py -v
       - name: Git whitespace check
         run: git -c core.whitespace=cr-at-eol diff --check HEAD^ HEAD

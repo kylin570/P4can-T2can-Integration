@@ -100,6 +100,8 @@
 #include "can_core.h"
 #include "can_busoff_persistence.h"
 #include "vehicle_logic.h"
+#include "dashkit_body_runtime.h"
+#include "dashkit_body_ui.h"
 #include "automatic_shift/gear_shift_runtime.h"
 #include "continuous_ap_runtime.h"
 #include "preheat_runtime.h"
