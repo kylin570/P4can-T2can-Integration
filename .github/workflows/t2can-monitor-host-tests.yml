@@ -8,6 +8,8 @@ jobs:
     steps:
       - name: Checkout merged P4CAN source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Compile and run pure C++ monitor tests (no CAN hardware)
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_t2can_monitor_pure.cpp -o /tmp/t2can_monitor_test
@@ -15,4 +17,4 @@ jobs:
       - name: Validate read-only API integration
         run: python3 tests/test_t2can_monitor_wiring.py -v
       - name: Git whitespace check
-        run: git diff --check HEAD^
+        run: git -c core.whitespace=cr-at-eol diff --check HEAD^ HEAD
