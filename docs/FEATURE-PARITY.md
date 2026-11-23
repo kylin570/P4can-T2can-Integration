@@ -27,8 +27,9 @@ The 32MB `large_fat_32MB` Arduino-ESP32 partition scheme contains two OTA applic
 
 - Set a private P4CAN Wi-Fi AP password in settings (not the default `12345678`).
 - Enable the existing S3XY Bluetooth Master through `/bluetooth` once. The new service starts on the **same** ESP-Hosted NimBLE stack as the S3XY central; disabling the Master also shuts off BLE administration.
-- A phone can connect with BLE after this; use `tools/ble-manager.html` from HTTPS/localhost, enter your private Wi-Fi password, then `PING`, `STATUS`, `WIFI_RESTART`, `S3XY_SCAN`, or `RESCUE`.
+- A phone can connect with BLE after this; use `tools/ble-manager.html` from HTTPS/localhost, enter your private Wi-Fi password, then `PING`, `STATUS`, `WIFI_RESTART`, `WIFI_RESET`, `S3XY_SCAN`, or `RESCUE`.
 - GATT command characteristic has encrypted-write permission and enforces the private AP password on every request. BLE does **not** accept firmware blobs directly; use `/update` after restoring AP access.
+- Software rescue mode now optionally starts a BLE maintenance-only peripheral after Wi-Fi Hosted initializes; S3XY client mapping and CAN functions remain disabled in rescue. `WIFI_RESET` restores default hotspot/password, then requires a new private password. It does not work when the ESP-Hosted Wi-Fi/BLE coprocessor cannot initialize.
 - There is no supported way to force-launch a phone browser merely by pressing a Tesla/CAN button. A mapped S3XY long-press can request software rescue and make `/recovery` available after reboot; opening the page remains a phone action.
 
 ## Known concerns

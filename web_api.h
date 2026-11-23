@@ -6771,6 +6771,9 @@ static void webTask(void *arg) {
 #if P4CAN_SERIAL_DIAGNOSTICS
   IPAddress ip = WiFi.softAPIP();
 #endif
+  // Wi-Fi and BLE remain usable for maintenance in software rescue mode.
+  // Do not launch the S3XY client mapper or any vehicle CAN task here.
+  if (p4RecoveryBootMode) (void)bleAdminStartRescueOnly();
   bootCaptureMarkOnce(&bootCapWifiReadyMs);
 #if P4CAN_SERIAL_DIAGNOSTICS
   P4CAN_SERIAL_PRINTF("AP: SSID=%s IP=%s\n", wifiApActiveSsid.c_str(), ip.toString().c_str());
@@ -6791,6 +6794,7 @@ static void webTask(void *arg) {
   server.on("/api/system/can-gpio", HTTP_POST, httpCanGpioSet);
   server.on("/api/wifi/status", HTTP_GET, httpWifiStatus);
   server.on("/api/wifi/apply", HTTP_POST, httpWifiApply);
+  server.on("/api/ble-admin/status", HTTP_GET, httpBleAdminStatus);
   server.on("/bluetooth", HTTP_GET, httpBluetoothAdminPage);
   server.on("/recovery", HTTP_GET, httpRecoveryPage);
   server.on("/api/recovery/status", HTTP_GET, httpRecoveryStatus);
@@ -6900,7 +6904,7 @@ static void webTask(void *arg) {
     server.on("/api/system/reset-stats", HTTP_POST, httpResetRuntimeStats);
     server.on("/api/system/reinit-can", HTTP_POST, httpCanHardReinit);
     server.on("/api/system/reset-settings", HTTP_POST, httpResetFirmwareSettings);
-    server.on("/api/ble-admin/status", HTTP_GET, httpBleAdminStatus);
+
     server.on("/api/s3xy/stats", HTTP_GET, httpS3xyStats);
     server.on("/api/s3xy/bluetooth-enable", HTTP_POST, httpS3xyBluetoothEnable);
     server.on("/api/s3xy/bluetooth-disable", HTTP_POST, httpS3xyBluetoothDisable);

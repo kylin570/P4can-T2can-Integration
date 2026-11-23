@@ -22,9 +22,12 @@ static volatile uint32_t bleAdminDeniedCount = 0;
 static volatile uint32_t bleAdminReplyRevision = 0;
 
 enum BleAdminCommand : uint8_t { BLE_ADMIN_NONE = 0, BLE_ADMIN_WIFI_RESTART = 1,
-                                  BLE_ADMIN_RESCUE = 2, BLE_ADMIN_S3XY_SCAN = 3 };
+                                  BLE_ADMIN_RESCUE = 2, BLE_ADMIN_S3XY_SCAN = 3,
+                                  BLE_ADMIN_WIFI_RESET = 4 };
 static void wifiApLoadConfig(String &ssid, String &password);
 static bool wifiApActivate(const String &requestedSsid, const String &requestedPassword, bool allowFallback);
+static void wifiApBuildDefaultSsid(String &ssid);
+static bool wifiApPersistConfig(const String &ssid, const String &password);
 
 static void bleAdminReloadCredential() {
   String ssid, password;
@@ -80,6 +83,7 @@ class P4BleAdminCallbacks : public BLECharacteristicCallbacks {
     if (cmd == "WIFI_RESTART") code = BLE_ADMIN_WIFI_RESTART;
     else if (cmd == "RESCUE") code = BLE_ADMIN_RESCUE;
     else if (cmd == "S3XY_SCAN") code = BLE_ADMIN_S3XY_SCAN;
+    else if (cmd == "WIFI_RESET") code = BLE_ADMIN_WIFI_RESET;
     else { bleAdminReply("UNKNOWN_COMMAND"); return; }
     uint8_t expected = BLE_ADMIN_NONE;
     if (!__atomic_compare_exchange_n(&bleAdminPending, &expected, code, false,
@@ -121,6 +125,22 @@ static bool bleAdminStart() {
   bleAdminReady = true;
   return true;
 }
+static bool bleAdminStartRescueOnly() {
+  if (!p4RecoveryBootMode || !p4NetworkAllowsBle()) return false;
+  if (!BLEDevice::init("P4-CAN-RECOVERY")) return false;
+  BLESecurity::setCapability(ESP_IO_CAP_NONE);
+  BLESecurity::setKeySize(16);
+  BLESecurity::setAuthenticationMode(false, false, false);
+#if defined(CONFIG_NIMBLE_ENABLED)
+  ble_hs_cfg.sm_bonding = 1;
+  ble_hs_cfg.sm_sc = 1;
+  ble_hs_cfg.sm_mitm = 0;
+#endif
+  if (bleAdminStart()) return true;
+  BLEDevice::deinit(false);
+  return false;
+}
+
 static void bleAdminShutdown() {
   bleAdminReady = false;
   bleAdminConnected = false;
@@ -152,5 +172,16 @@ static void bleAdminServiceTick() {
   } else if (code == BLE_ADMIN_S3XY_SCAN) {
     const bool ok = s3xyBluetoothMasterIsEnabled() && s3xyQueueCommand(S3XY_CMD_DISCOVERY_SCAN);
     bleAdminReply(ok ? "S3XY_SCAN_QUEUED" : "S3XY_UNAVAILABLE");
+  } else if (code == BLE_ADMIN_WIFI_RESET) {
+    String ssid;
+    wifiApBuildDefaultSsid(ssid);
+    // Restore connectivity with the board's documented recovery password.
+    // This deliberately disables password-based BLE administration until the
+    // user creates a fresh private password through Wi-Fi settings.
+    const bool saved = wifiApPersistConfig(ssid, "12345678");
+    if (!saved) { bleAdminReply("WIFI_RESET_SAVE_FAILED"); return; }
+    bleAdminReply("WIFI_RESET_RECONNECT");
+    bleAdminReloadCredential();
+    (void)wifiApActivate(ssid, "12345678", true);
   }
 }
