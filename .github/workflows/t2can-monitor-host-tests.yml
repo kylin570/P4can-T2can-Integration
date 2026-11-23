@@ -25,5 +25,9 @@ jobs:
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_ble_admin_auth_pure.cpp -o /tmp/ble_admin_test
           /tmp/ble_admin_test
+      - name: Test independent mini-program companion tools
+        run: |
+          python3 tests/test_tsl8_compat_wiring.py -v
+          node tests/test_tsl8_ui_runtime.js
       - name: Git whitespace check
         run: git -c core.whitespace=cr-at-eol diff --check HEAD^ HEAD

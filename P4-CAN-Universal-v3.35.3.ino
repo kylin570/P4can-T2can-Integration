@@ -61,6 +61,8 @@
 #include "das_status_pure.h"
 #include "t2can_monitor_pure.h"
 #include "t2can_monitor_ui.h"
+#include "tsl8_gauge_ui.h"
+#include "tsl8_backup_ui.h"
 #include "firmware_update_ui.h"
 #include "recovery_runtime.h"
 #include "recovery_portal_ui.h"

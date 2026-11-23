@@ -6,6 +6,7 @@
 > [integration notes](docs/T2CAN-INTEGRATION.md). Not tested on a vehicle.
 > Read-only monitoring web page: `/t2can` (JSON: `/api/t2can-monitor`).
 > Admin additions: `/bluetooth` (BLE status / pairing), `/update` (password-protected firmware OTA), `/recovery` (software rescue & A/B fallback). [Feature parity audit](docs/FEATURE-PARITY.md).
+> Mini-program feature audit: [TSL8 微信小程序功能差异核对](docs/TSL8-WECHAT-P4CAN-PARITY.md). Independent P4CAN read-only gauge `/gauge`, sanitized settings snapshot `/config-backup`. No proprietary TSL8 binary or mini-program source is bundled.
 
 
 The ultimate solution for accessing all features using an ESP32-P4/C6 board + 3 × SN65HVD230 CAN transceivers.

@@ -14,6 +14,17 @@
 
 
 // Passive T-2CAN compatibility telemetry: never changes settings or transmits CAN.
+// Mini-program-style tools use existing read-only endpoints, with no new
+// vehicle command, steering or CAN transmission paths.
+static void httpTsl8GaugePage() {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", P4CAN_GAUGE_HTML);
+}
+static void httpTsl8BackupPage() {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", P4CAN_BACKUP_HTML);
+}
+
 static void httpT2CanMonitorPage() {
   server.sendHeader("Cache-Control", "no-store");
   server.send_P(200, "text/html; charset=utf-8", T2CAN_MONITOR_HTML);
@@ -6784,6 +6795,8 @@ static void webTask(void *arg) {
   server.on("/fonts/geist-lab.woff2", HTTP_GET, httpLabGeistFont);
   server.on("/fonts/geist-mono-lab.woff2", HTTP_GET, httpLabGeistMonoFont);
   server.on("/api/profile/status", HTTP_GET, httpProfileStatus);
+  server.on("/gauge", HTTP_GET, httpTsl8GaugePage);
+  server.on("/config-backup", HTTP_GET, httpTsl8BackupPage);
   server.on("/t2can", HTTP_GET, httpT2CanMonitorPage);
   server.on("/api/t2can-monitor", HTTP_GET, httpT2CanMonitor);
   server.on("/api/profile/select", HTTP_POST, httpProfileSelect);

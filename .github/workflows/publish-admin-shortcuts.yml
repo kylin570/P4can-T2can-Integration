@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/publish-admin-shortcuts.yml'
+      - 'tools/enable_admin_shortcuts.py'
   workflow_dispatch:
 permissions:
   contents: write
@@ -22,6 +23,10 @@ jobs:
           python3 tools/build_dashboard.py
       - name: Verify embedded HTML exactly matches source
         run: python3 tests/test_admin_entrypoints.py -v
+      - name: Check mini-program compatibility navigation
+        run: |
+          node tests/test_tsl8_ui_runtime.js
+          python3 tests/test_tsl8_compat_wiring.py -v
       - name: Run existing dashboard functionality checks
         run: node tests/test_dashboard.js
       - name: Commit generated dashboard and bundled header
