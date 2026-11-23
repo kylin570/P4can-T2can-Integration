@@ -1,0 +1,40 @@
+name: ESP32-P4 firmware compilation (unverified)
+on:
+  push:
+    paths:
+      - 'P4-CAN-Universal-v3.35.3.ino'
+      - '*.h'
+      - '*.c'
+      - 'automatic_shift/**'
+      - 'lighting/**'
+      - 'tools/**'
+      - '.github/workflows/p4can-firmware-compile.yml'
+  workflow_dispatch:
+jobs:
+  compile-esp32p4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout P4CAN integration
+        uses: actions/checkout@v4
+      - name: Set up official Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+      - name: Install pinned ESP32 Arduino core 3.3.12
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      - name: Build P4 board firmware without flashing
+        shell: bash
+        run: |
+          set -euo pipefail
+          SKETCH="$RUNNER_TEMP/P4-CAN-Universal-v3.35.3"
+          mkdir -p "$SKETCH"
+          rsync -a --exclude '.git' ./ "$SKETCH/"
+          mkdir -p "$RUNNER_TEMP/p4-build"
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32p4:ChipVariant=postv3,FlashSize=32M,PartitionScheme=app5M_fat24M_32MB,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc,FlashMode=qio' \
+            --build-path "$RUNNER_TEMP/p4-build" \
+            "$SKETCH"
+      - name: Firmware validation notice
+        if: success()
+        run: echo 'Compile passed only; no device flashing, CAN-bus bench verification, or road validation was performed.'
