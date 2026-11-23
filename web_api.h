@@ -2392,6 +2392,7 @@ static void httpWifiApply() {
     server.send(500, "application/json", "{\"ok\":false,\"error\":\"NVS write failed\"}");
     return;
   }
+  bleAdminReloadCredential();
   const bool changed = (ssid != wifiApActiveSsid) || (password != wifiApActivePassword);
   String resp = String("{\"ok\":true,\"reconnecting\":") + (changed ? "true" : "false") +
                 ",\"ssid\":\"" + wifiApJsonEscape(ssid) + "\"}";
@@ -2407,6 +2408,32 @@ static void httpWifiApply() {
 }
 
 // ─── S3XY BLE multi-device HTTP ──────────────────────────────
+static bool otaCredentialReady();
+static bool otaRequestAuthenticated();
+static void httpBluetoothAdminPage() {
+  if (!otaCredentialReady()) { server.send(403, "text/plain", "Configure private WiFi password first"); return; }
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", P4_BLUETOOTH_UI);
+}
+
+static void httpBleAdminStatus() {
+  String out;
+  JsonWriterArduino jw(out);
+  jw.boolean("ok", true);
+  jw.boolean("bleServiceReady", bleAdminReady);
+  jw.boolean("bleClientConnected", bleAdminConnected);
+  jw.boolean("s3xyBluetoothMasterEnabled", s3xyBluetoothMasterIsEnabled());
+  jw.boolean("requiresPrivateWifiPassword", true);
+  jw.string("serviceUuid", P4_BLE_ADMIN_SERVICE);
+  jw.string("commandUuid", P4_BLE_ADMIN_COMMAND);
+  jw.string("replyUuid", P4_BLE_ADMIN_REPLY);
+  jw.u32("authenticationFailures", __atomic_load_n(&bleAdminDeniedCount, __ATOMIC_RELAXED));
+  jw.finish();
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", out);
+}
+
 static void httpS3xyStats() {
   server.send(200, "application/json", s3xyStatsToJson());
 }
@@ -2741,12 +2768,51 @@ static String otaStatusJson() {
 }
 
 static void httpOtaStatus() {
+    if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
     server.send(200, "application/json", otaStatusJson());
+}
+
+// Device AP password is the firmware-admin password (Basic auth user: admin).
+// Never authorize a known/default AP password: first choose a private AP key
+// in Wi-Fi settings. NVS secrets are never included in JSON or serial logs.
+static bool otaCredentialReady() {
+    String ssid, password;
+    wifiApLoadConfig(ssid, password);
+    return wifiApConfigValid(ssid, password) && password != "12345678";
+}
+
+static bool otaRequestAuthenticated() {
+    if (!otaCredentialReady()) return false;
+    String ssid, password;
+    wifiApLoadConfig(ssid, password);
+    return server.authenticate("admin", password.c_str());
+}
+
+static void httpOtaPage() {
+    if (!otaCredentialReady()) {
+        server.send(403, "text/plain; charset=utf-8", "Change the default Wi-Fi AP password in Settings before using OTA.");
+        return;
+    }
+    if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+    server.sendHeader("Cache-Control", "no-store");
+    server.send_P(200, "text/html; charset=utf-8", P4CAN_UPDATE_UI);
 }
 
 static void httpOtaUpload() {
     HTTPUpload &up = server.upload();
 
+    if (up.status == UPLOAD_FILE_START && !otaRequestAuthenticated()) {
+        // Do not stop CAN or touch flash on unauthenticated requests.
+        otaError = true;
+        otaSuccess = false;
+        otaUploadEnded = false;
+        otaInProgress = false;
+        otaStage = "authentication";
+        strncpy(otaErrMsg, "authorization required", sizeof(otaErrMsg) - 1);
+        otaErrMsg[sizeof(otaErrMsg) - 1] = '\0';
+        return;
+    }
+    if (!otaRequestAuthenticated()) return;
     if (up.status == UPLOAD_FILE_START) {
         // WebServer resets this client to 5 s before parsing. Set the payload
         // read's idle timeout here, without changing other HTTP requests.
@@ -2811,13 +2877,99 @@ static void httpOtaUpload() {
 }
 
 static void httpOtaFinish() {
-    bool ok = otaSuccess && !otaError;
+    if (!otaCredentialReady()) {
+        server.send(403, "application/json", "{\"ok\":false,\"error\":\"set private WiFi password first\"}");
+        return;
+    }
+    if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+    bool ok = otaUploadEnded && otaBytes > 0 && otaSuccess && !otaError;
     server.sendHeader("Connection", "close");
     server.send(200, "application/json", otaStatusJson());
     if (ok) {
         delay(700);
         restartP4CanSafely();
     }
+}
+
+// Recovery operations are separated from ordinary CAN feature updates.
+static void httpRecoveryStatus() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  const esp_partition_t *other = esp_ota_get_next_update_partition(nullptr);
+  String j;
+  JsonWriterArduino jw(j);
+  jw.boolean("rescueBoot", p4RecoveryBootMode);
+  jw.boolean("otherImagePresent", p4RecoveryOtherImageValid());
+  jw.string("runningPartition", running ? running->label : "UNKNOWN");
+  jw.string("otherPartition", other ? other->label : "UNKNOWN");
+  jw.string("wifiIp", WiFi.softAPIP().toString());
+  jw.finish();
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", j);
+}
+static void httpRecoveryPage() {
+  if (!otaCredentialReady()) {
+    server.send(403, "text/plain", "Configure private WiFi AP password first");
+    return;
+  }
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", P4_RECOVERY_UI);
+}
+static void httpRecoveryEnter() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  if (!p4RecoverySetNextBoot(true)) {
+    server.send(500, "application/json", "{\"ok\":false,\"error\":\"NVS save failed\"}");
+    return;
+  }
+  if (!prepareCanForMaintenance()) {
+    server.send(503, "application/json", "{\"ok\":false,\"error\":\"CAN stop unconfirmed, reboot manually\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":true,\"rescueNextBoot\":true}");
+  delay(250);
+  restartP4CanSafely();
+}
+static void httpRecoveryExit() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  if (!p4RecoverySetNextBoot(false)) {
+    server.send(500, "application/json", "{\"ok\":false,\"error\":\"NVS save failed\"}");
+    return;
+  }
+  if (!p4RecoveryBootMode && !prepareCanForMaintenance()) {
+    server.send(503, "application/json", "{\"ok\":false,\"error\":\"CAN stop unconfirmed\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":true,\"rebooting\":true}");
+  delay(250);
+  restartP4CanSafely();
+}
+static void httpRecoveryRollback() {
+  if (!otaRequestAuthenticated()) { server.requestAuthentication(); return; }
+  const esp_partition_t *other = esp_ota_get_next_update_partition(nullptr);
+  if (!p4RecoveryOtherImageValid() || !other) {
+    server.send(409, "application/json", "{\"ok\":false,\"error\":\"other OTA slot not valid\"}");
+    return;
+  }
+  if (!p4RecoveryBootMode && !prepareCanForMaintenance()) {
+    server.send(503, "application/json", "{\"ok\":false,\"error\":\"CAN stop unconfirmed\"}");
+    return;
+  }
+  if (esp_ota_set_boot_partition(other) != ESP_OK) {
+    server.send(500, "application/json", "{\"ok\":false,\"error\":\"partition validation failed\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":true,\"rebooting\":true,\"rolledBack\":true}");
+  delay(250);
+  restartP4CanSafely();
+}
+static void recoveryButtonService() {
+  if (!__atomic_exchange_n(&p4RecoveryButtonRequested, false, __ATOMIC_ACQ_REL)) return;
+  // The mapped S3XY button requests a one-shot recovery boot; no vehicle
+  // command is sent. Schedule all NVS/network work on the web task only.
+  if (!p4RecoverySetNextBoot(true)) return;
+  if (!prepareCanForMaintenance()) return;
+  restartP4CanSafely();
 }
 
 static uint8_t researchCaptureParseSlot(const String &raw) {
@@ -6639,7 +6791,14 @@ static void webTask(void *arg) {
   server.on("/api/system/can-gpio", HTTP_POST, httpCanGpioSet);
   server.on("/api/wifi/status", HTTP_GET, httpWifiStatus);
   server.on("/api/wifi/apply", HTTP_POST, httpWifiApply);
+  server.on("/bluetooth", HTTP_GET, httpBluetoothAdminPage);
+  server.on("/recovery", HTTP_GET, httpRecoveryPage);
+  server.on("/api/recovery/status", HTTP_GET, httpRecoveryStatus);
+  server.on("/api/recovery/enter", HTTP_POST, httpRecoveryEnter);
+  server.on("/api/recovery/exit", HTTP_POST, httpRecoveryExit);
+  server.on("/api/recovery/rollback", HTTP_POST, httpRecoveryRollback);
   server.on("/api/ota/status", HTTP_GET, httpOtaStatus);
+  server.on("/update", HTTP_GET, httpOtaPage);
   server.on("/update", HTTP_POST, httpOtaFinish, httpOtaUpload);
 
   if (!vehicleProfileSetupMode && !vehicleProfileNvsError) {
@@ -6741,6 +6900,7 @@ static void webTask(void *arg) {
     server.on("/api/system/reset-stats", HTTP_POST, httpResetRuntimeStats);
     server.on("/api/system/reinit-can", HTTP_POST, httpCanHardReinit);
     server.on("/api/system/reset-settings", HTTP_POST, httpResetFirmwareSettings);
+    server.on("/api/ble-admin/status", HTTP_GET, httpBleAdminStatus);
     server.on("/api/s3xy/stats", HTTP_GET, httpS3xyStats);
     server.on("/api/s3xy/bluetooth-enable", HTTP_POST, httpS3xyBluetoothEnable);
     server.on("/api/s3xy/bluetooth-disable", HTTP_POST, httpS3xyBluetoothDisable);
@@ -6763,6 +6923,8 @@ static void webTask(void *arg) {
 
   for (;;) {
     server.handleClient();
+    bleAdminServiceTick();
+    recoveryButtonService();
     p4R79TimingDriverPoll();
     researchCaptureService();
     preheatSettingsService();

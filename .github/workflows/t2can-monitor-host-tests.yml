@@ -16,5 +16,14 @@ jobs:
           /tmp/t2can_monitor_test
       - name: Validate read-only API integration
         run: python3 tests/test_t2can_monitor_wiring.py -v
+      - name: Validate firmware OTA authentication, recovery and BLE wiring
+        run: |
+          python3 tests/test_ota_auth_wiring.py -v
+          python3 tests/test_recovery_wiring.py -v
+          python3 tests/test_ble_admin_wiring.py -v
+      - name: Compile and check BLE admin password parser
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_ble_admin_auth_pure.cpp -o /tmp/ble_admin_test
+          /tmp/ble_admin_test
       - name: Git whitespace check
         run: git -c core.whitespace=cr-at-eol diff --check HEAD^ HEAD

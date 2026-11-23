@@ -61,6 +61,9 @@
 #include "das_status_pure.h"
 #include "t2can_monitor_pure.h"
 #include "t2can_monitor_ui.h"
+#include "firmware_update_ui.h"
+#include "recovery_runtime.h"
+#include "recovery_portal_ui.h"
 #include "ap_display_hold_pure.h"
 #include "mode_h_pure.h"
 #include "pedal_map_session_pure.h"
@@ -90,6 +93,8 @@
 #include "can_research_capture.h"
 #include "driver_monitor_capture.h"
 #include "s3xy_ble.h"
+#include "ble_admin.h"
+#include "bluetooth_admin_ui.h"
 #include "can_core.h"
 #include "can_busoff_persistence.h"
 #include "vehicle_logic.h"
@@ -189,6 +194,12 @@ void setup() {
         P4CAN_SERIAL_PRINTLN("Vehicle profile invalid/incomplete -> SAFE SETUP MODE");
       }
     }
+  }
+
+  // One-shot rescue boot: only network/dashboard/OTA, never CAN controllers.
+  if (!vehicleProfileNvsError && p4RecoveryConsumeNextBoot()) {
+    p4RecoveryBootMode = true;
+    vehicleProfileSetupMode = true;
   }
 
   (void)p4CanGpioLoadAtBoot();

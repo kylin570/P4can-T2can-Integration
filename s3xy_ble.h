@@ -107,7 +107,8 @@ enum S3xyAction : uint8_t {
   S3XY_ACTION_BATTERY_PREHEAT = 13,
   S3XY_ACTION_FSD_VISUALISATION = 14,
   S3XY_ACTION_AP_RIGHT_LANE_CHANGE = 15,
-  S3XY_ACTION_AP_LEFT_LANE_CHANGE = 16
+  S3XY_ACTION_AP_LEFT_LANE_CHANGE = 16,
+  S3XY_ACTION_RECOVERY_PORTAL = 17
 };
 
 enum S3xyCommandType : uint8_t {
@@ -352,6 +353,7 @@ static const char *s3xyStateName(uint8_t st) {
 }
 
 static const char *s3xyActionCode(uint8_t action) {
+  if (action == S3XY_ACTION_RECOVERY_PORTAL) return "recovery_portal";
   if (action == S3XY_ACTION_NOA_CANCEL) return "noa_cancel";
   if (action == S3XY_ACTION_ACCEL_MODE_TOGGLE) return "accel_mode_toggle";
   if (action == S3XY_ACTION_PERFORMANCE_MODE) return "performance_mode";
@@ -372,6 +374,7 @@ static const char *s3xyActionCode(uint8_t action) {
 }
 
 static const char *s3xyActionLabel(uint8_t action) {
+  if (action == S3XY_ACTION_RECOVERY_PORTAL) return "Recovery Portal";
   if (action == S3XY_ACTION_NOA_CANCEL) return "NOA Lane Change Cancel";
   if (action == S3XY_ACTION_ACCEL_MODE_TOGGLE) return "Acceleration Mode Toggle";
   if (action == S3XY_ACTION_PERFORMANCE_MODE) return "Performance Mode";
@@ -406,6 +409,7 @@ static bool s3xyActionParseKnown(const String &s, uint8_t &out) {
   if (s == "ap_left_lane_change" || s == "AP Left Lane Change") { out = S3XY_ACTION_AP_LEFT_LANE_CHANGE; return true; }
   if (s == "ap_right_lane_change" || s == "AP Right Lane Change") { out = S3XY_ACTION_AP_RIGHT_LANE_CHANGE; return true; }
   if (s == "fsd_visualisation" || s == "FSD Visualisation") { out = S3XY_ACTION_FSD_VISUALISATION; return true; }
+  if (s == "recovery_portal" || s == "Recovery Portal") { out = S3XY_ACTION_RECOVERY_PORTAL; return true; }
   if (s == "none" || s == "None") { out = S3XY_ACTION_NONE; return true; }
   if (s == "noa_cancel" || s == "NOA Lane Change Cancel") { out = S3XY_ACTION_NOA_CANCEL; return true; }
   if (s == "accel_mode_toggle" || s == "Acceleration Mode Toggle") { out = S3XY_ACTION_ACCEL_MODE_TOGGLE; return true; }
@@ -1230,6 +1234,7 @@ static S3xyClientCallbacks *s3xyClientCallbacks[S3XY_MAX_DEVICES] = {};
 
 static void s3xyRunMappedAction(uint8_t slot, uint8_t action, const char *gesture) {
   if (action == S3XY_ACTION_NONE) return;
+  if (action == S3XY_ACTION_RECOVERY_PORTAL) { p4RecoveryRequestFromButton(); return; }
   if (!s3xyActionSupportedForCurrentProfile(action)) {
     s3xyLogPush(S3XY_LOG_INFO, "Mapped action unavailable for current vehicle profile", nullptr, 0, -127, (int8_t)slot);
     return;
@@ -1560,6 +1565,9 @@ class S3xyAdvertisedCallbacks : public BLEAdvertisedDeviceCallbacks {
 };
 static S3xyAdvertisedCallbacks s3xyAdvertisedCallbacks;
 
+static bool bleAdminStart();
+static void bleAdminShutdown();
+
 static bool s3xyMapperInit() {
   if (!s3xyBluetoothMasterIsEnabled()) return false;
   // The C6 is shared: never initialize BLE while WiFi brings up Hosted.
@@ -1651,6 +1659,9 @@ static bool s3xyMapperInit() {
     s3xyLogPush(S3XY_LOG_SECURITY,
                 "boot bond store empty with saved registry; automatic re-pair recovery armed");
   }
+  // Standalone encrypted GATT admin runs beside existing S3XY central client.
+  // A GATT failure must not break existing button auto-connect.
+  (void)bleAdminStart();
   return true;
 }
 
@@ -1767,6 +1778,7 @@ static void s3xyRuntimeShutdown() {
     // false is mandatory: releasing BT memory makes same-boot re-enable
     // impossible. Current Arduino-ESP32 deinit(false) tears down host/controller
     // and resets its initialized flag while preserving reinitialization support.
+    bleAdminShutdown();
     p4BleSecurityShutdown();
     BLEDevice::deinit(false);
   }
