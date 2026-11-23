@@ -1,0 +1,18 @@
+name: T-2CAN passive monitoring host checks
+on:
+  push:
+  pull_request:
+jobs:
+  passive-host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merged P4CAN source
+        uses: actions/checkout@v4
+      - name: Compile and run pure C++ monitor tests (no CAN hardware)
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test_t2can_monitor_pure.cpp -o /tmp/t2can_monitor_test
+          /tmp/t2can_monitor_test
+      - name: Validate read-only API integration
+        run: python3 tests/test_t2can_monitor_wiring.py -v
+      - name: Git whitespace check
+        run: git diff --check HEAD^

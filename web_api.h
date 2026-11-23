@@ -14,6 +14,11 @@
 
 
 // Passive T-2CAN compatibility telemetry: never changes settings or transmits CAN.
+static void httpT2CanMonitorPage() {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html; charset=utf-8", T2CAN_MONITOR_HTML);
+}
+
 static void httpT2CanMonitor() {
   t2can_monitor::State observed;
   portENTER_CRITICAL(&t2canMonitorMux);
@@ -56,6 +61,7 @@ static void httpT2CanMonitor() {
     out += '}';
   }
   out += "]}";
+  server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", out);
 }
 
@@ -6623,6 +6629,7 @@ static void webTask(void *arg) {
   server.on("/fonts/geist-lab.woff2", HTTP_GET, httpLabGeistFont);
   server.on("/fonts/geist-mono-lab.woff2", HTTP_GET, httpLabGeistMonoFont);
   server.on("/api/profile/status", HTTP_GET, httpProfileStatus);
+  server.on("/t2can", HTTP_GET, httpT2CanMonitorPage);
   server.on("/api/t2can-monitor", HTTP_GET, httpT2CanMonitor);
   server.on("/api/profile/select", HTTP_POST, httpProfileSelect);
   server.on("/api/system/factory-reset", HTTP_POST, httpFactoryReset);

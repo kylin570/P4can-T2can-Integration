@@ -4,6 +4,7 @@
 > highway-state and CAN health reporting at `/api/t2can-monitor`. No new
 > CAN transmission or automated steering behavior is introduced. See
 > [integration notes](docs/T2CAN-INTEGRATION.md). Not tested on a vehicle.
+> Read-only monitoring web page: `/t2can` (JSON: `/api/t2can-monitor`).
 
 
 The ultimate solution for accessing all features using an ESP32-P4/C6 board + 3 × SN65HVD230 CAN transceivers.

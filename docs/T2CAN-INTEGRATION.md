@@ -10,6 +10,7 @@ T-2CAN research reference: `emo666/t2can-lane-change`.
   road-context status from P4CAN's **already validated receive handlers**.
 - The original P4CAN TLSSC highway hysteresis remains the single source of truth;
   the monitor observes its result and does not run its own control policy.
+- `GET /t2can` serves a standalone Chinese-language read-only monitor page.
 - `GET /api/t2can-monitor` reports timestamp freshness, AP/NOA observation,
   highway classification, configured gate previews, and per-bus receive counters.
 - No new CAN frames are constructed or transmitted by this integration.
@@ -47,3 +48,15 @@ All values are observations, not proof of vehicle action. `wouldPauseForNoa`
 and `wouldPauseForHighway` are *informational previews only*, not inputs to
 CAN TX. Freshness expires after 2 seconds. Road context is displayed as
 unknown when GPS match is missing or context data is stale.
+
+## Browser display
+
+After installing a **bench-verified** firmware build and connecting to the
+board's AP, visit `http://<board-ip>/t2can`. The page polls
+`/api/t2can-monitor` locally every 1.5 seconds and exposes no POST handlers.
+
+## Automatic checks
+
+The `.github/workflows/t2can-monitor-host-tests.yml` workflow runs C++ pure
+logic tests and Python read-only wiring checks on push/PR. These checks do
+**not** perform an ESP32-P4 board build or validate the firmware in a car.
