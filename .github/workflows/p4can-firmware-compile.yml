@@ -12,8 +12,13 @@ on:
   workflow_dispatch:
 jobs:
   compile-esp32p4:
+    name: P4 chip ${{ matrix.chip_variant }} (BENCH ONLY)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        chip_variant: [postv3, prev3]
     steps:
       - name: Checkout P4CAN integration
         uses: actions/checkout@v4
@@ -23,18 +28,35 @@ jobs:
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-      - name: Build P4 board firmware without flashing
+      - name: Compile firmware without flashing
         shell: bash
         run: |
           set -euo pipefail
           SKETCH="$RUNNER_TEMP/P4-CAN-Universal-v3.35.3"
           mkdir -p "$SKETCH"
           rsync -a --exclude '.git' ./ "$SKETCH/"
-          mkdir -p "$RUNNER_TEMP/p4-build"
+          OUT="$RUNNER_TEMP/firmware"
+          mkdir -p "$OUT" "$RUNNER_TEMP/p4-build"
           arduino-cli compile \
-            --fqbn 'esp32:esp32:esp32p4:ChipVariant=postv3,FlashSize=32M,PartitionScheme=app5M_fat24M_32MB,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc,FlashMode=qio' \
+            --fqbn 'esp32:esp32:esp32p4:ChipVariant=${{ matrix.chip_variant }},FlashSize=32M,PartitionScheme=app5M_fat24M_32MB,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc,FlashMode=qio' \
             --build-path "$RUNNER_TEMP/p4-build" \
+            --output-dir "$OUT" \
             "$SKETCH"
-      - name: Firmware validation notice
-        if: success()
-        run: echo 'Compile passed only; no device flashing, CAN-bus bench verification, or road validation was performed.'
+          cat > "$OUT/READ_ME_FIRST.txt" <<'NOTICE'
+          Experimental P4CAN + T2CAN monitoring integration
+          BUILT FOR HARDWARE BENCH EVALUATION ONLY - NOT VEHICLE VALIDATED
+          Arduino-ESP32 core 3.3.12; ESP32-P4; 32MB flash; PSRAM on.
+          This is not proof of CAN wiring compatibility, steering functionality,
+          driver safety, AP behavior or road validation.
+          Do not flash to a vehicle-connected device without matching chip
+          revision, verifying pinout and performing independent bench testing.
+          NOTICE
+          echo 'Chip variant: ${{ matrix.chip_variant }}' >> "$OUT/READ_ME_FIRST.txt"
+          ( cd "$OUT" && sha256sum ./*.bin > SHA256SUMS.txt )
+      - name: Upload test-only firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: P4CAN-T2CAN-${{ matrix.chip_variant }}-UNVERIFIED
+          path: ${{ runner.temp }}/firmware/
+          if-no-files-found: error
+          retention-days: 14
