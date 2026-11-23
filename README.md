@@ -1,5 +1,11 @@
 # P4-CAN Universal Unlock v3.35.3
 
+> **Experimental P4CAN + T-2CAN monitoring integration**: read-only AP/NOA,
+> highway-state and CAN health reporting at `/api/t2can-monitor`. No new
+> CAN transmission or automated steering behavior is introduced. See
+> [integration notes](docs/T2CAN-INTEGRATION.md). Not tested on a vehicle.
+
+
 The ultimate solution for accessing all features using an ESP32-P4/C6 board + 3 × SN65HVD230 CAN transceivers.
 
 DOESN'T WORK CORRECTLY BEFORE 2026.20 Update

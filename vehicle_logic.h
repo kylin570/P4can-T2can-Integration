@@ -3003,6 +3003,10 @@ static void handle390(const uint8_t *data) {
     pedalMapClearSessionOnParkTransition(prevGs, gs);
 }
 
+// Diagnostic state only; never used by any transmit policy.
+static portMUX_TYPE t2canMonitorMux = portMUX_INITIALIZER_UNLOCKED;
+static t2can_monitor::State t2canMonitorState = {};
+
 static void handle921(const uint8_t *data, uint8_t dlc) {
     const DasStatus399Pure das = dasStatus399DecodePure(data, dlc);
     if (!das.valid) return;
@@ -3039,6 +3043,9 @@ static void handle921(const uint8_t *data, uint8_t dlc) {
     // already transmitting on the physical bus cannot be recalled.
     if (wasAp && !ap && countryBarrierLocked) mux1CancelPendingLocked();
     countryOverrideAuthorizationBarrierUnlock(countryBarrierLocked);
+    portENTER_CRITICAL(&t2canMonitorMux);
+    t2can_monitor::observeAp(t2canMonitorState, dasState4, now);
+    portEXIT_CRITICAL(&t2canMonitorMux);
 
     // Chassis and Party 0x399 share the bit42..45 Hands-On decoder. Sharing
     // one epoch prevents 3 -> 4 -> 5 from retriggering.
@@ -3132,7 +3139,13 @@ static void handleRoadContext238(const uint8_t *data, uint8_t dlc) {
                            decoded.gpsRoadMatch,
                            decoded.controlledAccess);
     if (tlsscHighwayHysteresis.confirmed != wasConfirmed) tlsscHighwayTransitions++;
+    const bool highwayConfirmed = tlsscHighwayHysteresis.confirmed;
     portEXIT_CRITICAL(&roadContextMux);
+    portENTER_CRITICAL(&t2canMonitorMux);
+    t2can_monitor::observeRoad(t2canMonitorState, decoded.roadClass,
+                               decoded.gpsRoadMatch, decoded.controlledAccess,
+                               highwayConfirmed, now);
+    portEXIT_CRITICAL(&t2canMonitorMux);
 }
 
 static bool tlsscHighwayGateBlocked(uint32_t now) {

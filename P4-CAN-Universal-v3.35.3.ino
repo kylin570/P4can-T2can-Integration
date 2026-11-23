@@ -59,6 +59,7 @@
 #include "can_task_diagnostics_pure.h"
 #include "can_research_capture_pure.h"
 #include "das_status_pure.h"
+#include "t2can_monitor_pure.h"
 #include "ap_display_hold_pure.h"
 #include "mode_h_pure.h"
 #include "pedal_map_session_pure.h"

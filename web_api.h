@@ -13,6 +13,52 @@
 // ═══════════════════════════════════════════════════════════════
 
 
+// Passive T-2CAN compatibility telemetry: never changes settings or transmits CAN.
+static void httpT2CanMonitor() {
+  t2can_monitor::State observed;
+  portENTER_CRITICAL(&t2canMonitorMux);
+  observed = t2canMonitorState;
+  portEXIT_CRITICAL(&t2canMonitorMux);
+  bool noaGate, highwayGate;
+  portENTER_CRITICAL(&stateMux);
+  noaGate = tlsscBlockInNoa;
+  highwayGate = tlsscHighwayGateEnabled;
+  portEXIT_CRITICAL(&stateMux);
+  const uint32_t now = (uint32_t)millis();
+  const t2can_monitor::View v = t2can_monitor::evaluate(observed, now,
+                                                       noaGate, highwayGate);
+  const auto flag = [](bool val) -> const char * { return val ? "true" : "false"; };
+  String out;
+  out.reserve(800);
+  out += "{\"mode\":\"read-only\",\"canTxAdded\":false";
+  out += ",\"apFresh\":"; out += flag(v.apFresh);
+  out += ",\"apState\":"; out += String((unsigned)observed.apState);
+  out += ",\"apActive\":"; out += flag(v.apActive);
+  out += ",\"noaActive\":"; out += flag(v.noaActive);
+  out += ",\"roadFresh\":"; out += flag(v.roadFresh);
+  out += ",\"roadClass\":"; out += String((unsigned)observed.roadClass);
+  out += ",\"gpsMatch\":"; out += flag(v.roadFresh && observed.gpsMatch);
+  out += ",\"highwayKnown\":"; out += flag(v.highwayKnown);
+  out += ",\"highwayConfirmed\":"; out += flag(v.highway);
+  out += ",\"noaGateConfigured\":"; out += flag(noaGate);
+  out += ",\"highwayGateConfigured\":"; out += flag(highwayGate);
+  out += ",\"wouldPauseForNoa\":"; out += flag(v.wouldPauseForNoa);
+  out += ",\"wouldPauseForHighway\":"; out += flag(v.wouldPauseForHighway);
+  out += ",\"can\":[";
+  for (uint8_t bus = 0; bus < P4_CAN_COUNT; ++bus) {
+    if (bus) out += ',';
+    const uint32_t last = __atomic_load_n(&p4CanLastRxMs[bus], __ATOMIC_RELAXED);
+    const uint32_t count = __atomic_load_n(&p4CanRxCount[bus], __ATOMIC_RELAXED);
+    out += "{\"bus\":"; out += String((unsigned)bus);
+    out += ",\"rxCount\":"; out += String((unsigned long)count);
+    out += ",\"lastRxAgeMs\":";
+    if (last != 0u) out += String((unsigned long)(now - last)); else out += "null";
+    out += '}';
+  }
+  out += "]}";
+  server.send(200, "application/json", out);
+}
+
 static void httpPedalMapStats(){server.send(200,"application/json",pedalMapStatsJson());}
 
 static void httpPedalMapSet() {
@@ -6577,6 +6623,7 @@ static void webTask(void *arg) {
   server.on("/fonts/geist-lab.woff2", HTTP_GET, httpLabGeistFont);
   server.on("/fonts/geist-mono-lab.woff2", HTTP_GET, httpLabGeistMonoFont);
   server.on("/api/profile/status", HTTP_GET, httpProfileStatus);
+  server.on("/api/t2can-monitor", HTTP_GET, httpT2CanMonitor);
   server.on("/api/profile/select", HTTP_POST, httpProfileSelect);
   server.on("/api/system/factory-reset", HTTP_POST, httpFactoryReset);
   server.on("/api/system/reset-nvs-keep-ble", HTTP_POST, httpResetNvsPreserveS3xyBle);
